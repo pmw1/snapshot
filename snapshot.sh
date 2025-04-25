@@ -13,8 +13,16 @@ else
         echo "[+] Switching to project root at $current_dir"
         cd "$current_dir" || { echo "[✖] Failed to switch to project root."; exit 1; }
     else
-        echo "[✖] Could not locate project root. Aborting."
-        exit 1
+        echo "[!] No .project_root found. Enter project name (e.g., MyProject):"
+        read -r project_name
+        if [ -z "$project_name" ]; then
+            echo "[✖] Error: Project name cannot be empty."
+            exit 1
+        fi
+        # Sanitize project name
+        project_name=$(echo "$project_name" | tr -d '\n\r' | sed 's/[^a-zA-Z0-9._-]/-/g')
+        echo "$project_name" > ".project_root"
+        echo "[+] Created .project_root with project name '$project_name'"
     fi
 fi
 
@@ -32,7 +40,7 @@ if [ -f ".project_root" ]; then
     project_name=$(echo "$project_name" | tr -d '\n\r' | sed 's/[^a-zA-Z0-9._-]/-/g')
     echo "[+] Project name loaded: $project_name"
 else
-    echo "[✖] No .project_root file found after moving. Aborting."
+    echo "[✖] No .project_root file found after setup. Aborting."
     exit 1
 fi
 
@@ -64,7 +72,7 @@ total_steps=7
 echo "[Step $step/$total_steps] Writing header..."
 ((step++))
 
-header="THIS IS A REINSTANTIATION FILE INTENDED TO BRING THE GPT UP-TO-DATE WITH THE OBJECTIVE AND CURRENT STATE OF THE PROJECT: $project_name.
+header="THIS IS A REINSTANTIATION FILE INTENDED TO BRING THE LLM UP-TO-DATE WITH THE OBJECTIVE AND CURRENT STATE OF THE PROJECT: $project_name.
 *******************************************************************************************
 CONTENTS OF THIS FILE:
 1. Project Specification files exported from 'reinstantiation/spec/'
@@ -90,7 +98,11 @@ if [ -d "reinstantiation/spec" ]; then
     find reinstantiation/spec/ -type f -printf "%T@ %p\0" | sort -z -n | while IFS= read -r -d '' line; do
         mod_time=$(echo "$line" | cut -d' ' -f1)
         file_path=$(echo "$line" | cut -d' ' -f2-)
-        formatted_time=$(date -d "@$mod_time" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "Unknown")
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            formatted_time=$(stat -f "%Sm" -t "%Y-%m-%d %H:%M:%S" "$file_path" 2>/dev/null || echo "Unknown")
+        else
+            formatted_time=$(date -d "@$mod_time" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "Unknown")
+        fi
         echo "[[[[[ FILE: $file_path | Modified: $formatted_time ]]]]]" >> "$output_file"
         cat "$file_path" >> "$output_file"
         echo -e "\n[[[[[ END FILE: $file_path ]]]]]\n" >> "$output_file"
@@ -165,6 +177,7 @@ find . -maxdepth 5 -type f -not -path "./reinstantiation/snapshot.txt" | while r
         cat "$file" >> "$output_file"
         echo -e "\n[[[[[ END FILE: $file ]]]]]\n" >> "$output_file"
     else
+        echo
         echo "[[[[[ BEGIN FILE: $file ]]]]]\n[[ BINARY FILE DETECTED: Content not displayed ]]\n[[[[[ END FILE: $file ]]]]]\n" >> "$output_file"
     fi
 done

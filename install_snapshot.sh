@@ -1,15 +1,15 @@
 #!/bin/bash
 
-# === Install snapshot tool into PATH ===
+# === Install snapshot tool globally into PATH ===
 
 # Configuration
-INSTALL_DIR="$HOME/.local/bin"  # Safest place without needing sudo
+INSTALL_DIR="$HOME/.local/bin"  # User-level global install; change to /usr/local/bin for system-wide (requires sudo)
 SCRIPT_NAME="snapshot"
 CURRENT_DIR=$(pwd)
 
 # Check write permissions for INSTALL_DIR
 if [ ! -w "$INSTALL_DIR" ]; then
-    echo "[✖] Error: No write permission for $INSTALL_DIR"
+    echo "[✖] Error: No write permission for $INSTALL_DIR (try sudo for /usr/local/bin)"
     exit 1
 fi
 
@@ -44,25 +44,8 @@ if [ -e "$INSTALL_DIR/$SCRIPT_NAME" ] && [ ! -L "$INSTALL_DIR/$SCRIPT_NAME" ]; t
     fi
 fi
 
-# Simulate creating required project folders
-mkdir -p "reinstantiation/spec" || { echo "[✖] Failed to create reinstantiation/spec"; exit 1; }
-
-# Create .project_root if missing, with user-prompted project name
-if [ ! -f ".project_root" ]; then
-    echo "[!] No .project_root found. Enter project name (e.g., MyProject):"
-    read -r project_name
-    if [ -z "$project_name" ]; then
-        echo "[✖] Error: Project name cannot be empty."
-        exit 1
-    fi
-    # Sanitize project name
-    project_name=$(echo "$project_name" | tr -d '\n\r' | sed 's/[^a-zA-Z0-9._-]/-/g')
-    echo "$project_name" > ".project_root"
-    echo "[+] Created .project_root with project name '$project_name'"
-fi
-
-# Install by symlink
-ln -sf "$SOURCE_FILE" "$INSTALL_DIR/$SCRIPT_NAME" || { echo "[✖] Failed to create symlink"; exit 1; }
+# Install by copying (not symlinking) to ensure global availability
+cp "$SOURCE_FILE" "$INSTALL_DIR/$SCRIPT_NAME" || { echo "[✖] Failed to copy to $INSTALL_DIR"; exit 1; }
 chmod +x "$INSTALL_DIR/$SCRIPT_NAME" || { echo "[✖] Failed to set executable permissions"; exit 1; }
 
 # Update PATH in shell config if necessary
@@ -106,4 +89,4 @@ else
 fi
 
 # Success
-echo "[✔] Installed '$SCRIPT_NAME' into $INSTALL_DIR. Run 'snapshot' from any project root with a .project_root file."
+echo "[✔] Installed '$SCRIPT_NAME' globally into $INSTALL_DIR. Run 'snapshot' from any project root."
