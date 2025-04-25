@@ -16,7 +16,7 @@ if [ -f "$CURRENT_DIR/$SCRIPT_NAME" ]; then
 elif [ -f "$CURRENT_DIR/${SCRIPT_NAME}.sh" ]; then
     SOURCE_FILE="$CURRENT_DIR/${SCRIPT_NAME}.sh"
     echo "[!] Found '${SCRIPT_NAME}.sh'. Installing as '$SCRIPT_NAME' without extension."
-    # Rename file temporarily without .sh for linking
+    # Copy file without .sh extension
     cp "$SOURCE_FILE" "$CURRENT_DIR/$SCRIPT_NAME"
     SOURCE_FILE="$CURRENT_DIR/$SCRIPT_NAME"
 else
@@ -26,6 +26,9 @@ fi
 
 # Ensure Unix line endings (prevent ^M issues)
 sed -i 's/\r$//' "$SOURCE_FILE"
+
+# Simulate creating required project folders
+mkdir -p "reinstantiation/spec"
 
 # Install by symlink (preferred: keeps it updatable easily)
 ln -sf "$SOURCE_FILE" "$INSTALL_DIR/$SCRIPT_NAME"
@@ -51,4 +54,5 @@ if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
 fi
 
 # Success
-echo "[✔] Installed '$SCRIPT_NAME' into $INSTALL_DIR. You can now run '$SCRIPT_NAME' from anywhere."
+echo "[✔] Installed '$SCRIPT_NAME' into $INSTALL_DIR. You can now run '$SCRIPT_NAME' from your project root."
+
