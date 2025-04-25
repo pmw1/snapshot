@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # === Install snapshot tool into PATH ===
+##updated to unix end of line endings
 
 # Configuration
 INSTALL_DIR="$HOME/.local/bin"  # safest place without needing sudo
