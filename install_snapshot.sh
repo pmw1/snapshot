@@ -15,7 +15,8 @@ mkdir -p "$INSTALL_DIR"
 if [ -f "$CURRENT_DIR/$SCRIPT_NAME" ]; then
     SOURCE_FILE="$CURRENT_DIR/$SCRIPT_NAME"
 elif [ -f "$CURRENT_DIR/${SCRIPT_NAME}.sh" ]; then
-    SOURCE_FILE="$CURRENT_DIR/${SCRIPT_NAME}.sh"\    echo "[!] Found '${SCRIPT_NAME}.sh'. Installing as '$SCRIPT_NAME' without extension."
+    SOURCE_FILE="$CURRENT_DIR/${SCRIPT_NAME}.sh"
+    echo "[!] Found '${SCRIPT_NAME}.sh'. Installing as '$SCRIPT_NAME' without extension."
 else
     echo "[✖] Error: '$SCRIPT_NAME' or '${SCRIPT_NAME}.sh' not found in $CURRENT_DIR"
     exit 1
