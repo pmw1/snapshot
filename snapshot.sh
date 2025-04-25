@@ -1,21 +1,61 @@
 #!/bin/bash
 
+# === Force move to the real project root where .project_root exists ===
+if [ -f ".project_root" ]; then
+    echo "[+] Project root detected."
+else
+    echo "[!] No .project_root found. Searching upward..."
+    current_dir=$(pwd)
+    while [ ! -f "$current_dir/.project_root" ] && [ "$current_dir" != "/" ]; do
+        current_dir=$(dirname "$current_dir")
+    done
+    if [ -f "$current_dir/.project_root" ]; then
+        echo "[+] Switching to project root at $current_dir"
+        cd "$current_dir" || { echo "[✖] Failed to switch to project root."; exit 1; }
+    else
+        echo "[✖] Could not locate project root. Aborting."
+        exit 1
+    fi
+fi
+
+# === Ensure required project directories exist ===
+mkdir -p "reinstantiation" "reinstantiation/spec" || { echo "[✖] Failed to create directories."; exit 1; }
+
 # === Project Configuration ===
-project_name="QUORUS"
+if [ -f ".project_root" ]; then
+    project_name=$(cat ".project_root")
+    if [ -z "$project_name" ]; then
+        echo "[✖] .project_root is empty. Aborting."
+        exit 1
+    fi
+    # Sanitize project_name
+    project_name=$(echo "$project_name" | tr -d '\n\r' | sed 's/[^a-zA-Z0-9._-]/-/g')
+    echo "[+] Project name loaded: $project_name"
+else
+    echo "[✖] No .project_root file found after moving. Aborting."
+    exit 1
+fi
+
 output_file="reinstantiation/snapshot.txt"
 ignore_list_file="ignore_list.txt"
+
+# Check for ignore_list.txt
+if [ ! -f "$ignore_list_file" ]; then
+    echo "[!] Warning: $ignore_list_file not found. Proceeding without ignore list."
+    ignore_list_file="/dev/null"
+fi
 
 start_time=$(date '+%Y-%m-%d %H:%M:%S')
 
 echo "[+] Initializing snapshot for project: $project_name"
 
-# Delete any existing snapshot.txt to prevent recursion
+# Delete existing snapshot.txt
 if [ -f "$output_file" ]; then
-  echo "[+] Deleting old snapshot file: $output_file"
-  rm "$output_file"
+    echo "[+] Deleting old snapshot file: $output_file"
+    rm "$output_file" || { echo "[✖] Failed to delete old snapshot."; exit 1; }
 fi
 
-> "$output_file"
+> "$output_file" || { echo "[✖] Failed to create snapshot file."; exit 1; }
 
 step=1
 total_steps=7
@@ -41,217 +81,155 @@ echo "$header" >> "$output_file"
 # === Section 1: Project Specification ===
 echo "[Step $step/$total_steps] Writing project specification files..."
 ((step++))
-
-section="******************************************* SECTION 1 **********************************************
+echo "******************************************* SECTION 1 **********************************************
 This section outputs the project specifications gathered from files located in 'reinstantiation/spec/'.
 All specifications are printed in chronological order based on file modification date.
-***************************************** BEGIN ***************************************************"
-echo "$section" >> "$output_file"
+***************************************** BEGIN ***************************************************" >> "$output_file"
 
 if [ -d "reinstantiation/spec" ]; then
-  find reinstantiation/spec/ -type f -printf "%T@ %p
-" | sort -n | while read -r line; do
-    mod_time=$(echo "$line" | cut -d' ' -f1)
-    file_path=$(echo "$line" | cut -d' ' -f2-)
-    formatted_time=$(date -d "@$mod_time" "+%Y-%m-%d %H:%M:%S")
-
-    echo "[[[[[ FILE: $file_path | Modified: $formatted_time ]]]]]" >> "$output_file"
-    cat "$file_path" >> "$output_file"
-    echo >> "$output_file"
-    echo "[[[[[ END FILE: $file_path ]]]]]" >> "$output_file"
-    echo >> "$output_file"
-  done
+    find reinstantiation/spec/ -type f -printf "%T@ %p\0" | sort -z -n | while IFS= read -r -d '' line; do
+        mod_time=$(echo "$line" | cut -d' ' -f1)
+        file_path=$(echo "$line" | cut -d' ' -f2-)
+        formatted_time=$(date -d "@$mod_time" "+%Y-%m-%d %H:%M:%S" 2>/dev/null || echo "Unknown")
+        echo "[[[[[ FILE: $file_path | Modified: $formatted_time ]]]]]" >> "$output_file"
+        cat "$file_path" >> "$output_file"
+        echo -e "\n[[[[[ END FILE: $file_path ]]]]]\n" >> "$output_file"
+    done
 else
-  echo "[[ No project specifications found: 'reinstantiation/spec/' directory does not exist. ]]" >> "$output_file"
+    echo "[[ No project specifications found: 'reinstantiation/spec/' directory does not exist. ]]" >> "$output_file"
 fi
-
-echo "***************************************** END SECTION 1 ***************************************************" >> "$output_file"
-for i in {1..5}; do echo >> "$output_file"; done
+echo "***************************************** END SECTION 1 ***************************************************\n\n" >> "$output_file"
 
 # === Section 2: System Environment ===
 echo "[Step $step/$total_steps] Capturing system environment..."
 ((step++))
-
-section="******************************************* SECTION 2 **********************************************
-This section captures the current working environment of the host/development system as of $(date)
-***************************************** BEGIN ***************************************************"
-
-section+="
-
-[System Specs]
-$(uname -a)
-
-[File System Specs]
-$(df -h)
-
-[USB Devices]
-$(lsusb)
-
-[Installed Packages]
-$(dpkg --get-selections)
-
-[Python Version and Installed Pip Modules]
-$(python3 --version)
-$(pip list)"
-
-if [ -f "venv/bin/activate" ]; then
-    source venv/bin/activate
-    section+="
-
-[Virtual Environment: Python Version and Installed Pip Modules]
-$(python --version)
-$(pip list)"
-    deactivate
-else
-    section+="
-
-[Virtual Environment: Python Version and Installed Pip Modules]
-(venv not found or not available)"
-fi
-
-echo "$section" >> "$output_file"
-echo "***************************************** END SECTION 2 ***************************************************" >> "$output_file"
-for i in {1..5}; do echo >> "$output_file"; done
+{
+    echo "******************************************* SECTION 2 **********************************************"
+    echo "This section captures the current working environment of the host/development system as of $(date)"
+    echo "***************************************** BEGIN ***************************************************"
+    echo -e "\n[System Specs]"
+    uname -a
+    echo -e "\n[File System Specs]"
+    df -h
+    echo -e "\n[Python Version]"
+    python3 --version 2>/dev/null || echo "Python3 not found"
+    if [ -f "venv/bin/activate" ]; then
+        source venv/bin/activate
+        echo -e "\n[Virtual Environment]"
+        python --version
+        echo -e "\n[PIP Modules]"
+        pip list
+        deactivate
+    else
+        echo -e "\n[Virtual Environment]\n(venv not found or not available)"
+    fi
+    echo "***************************************** END SECTION 2 ***************************************************"
+    echo -e "\n\n"
+} >> "$output_file"
 
 # === Section 3: Project Tree Structure ===
 echo "[Step $step/$total_steps] Capturing project tree structure..."
 ((step++))
-
-section="******************************************* SECTION 3 **********************************************
-This section prints the tree structure from the project root with 5 levels of recursion as of $(date)
-***************************************** BEGIN ***************************************************"
-
-if command -v tree >/dev/null 2>&1; then
-  section+="
-
-[Project Tree Structure (depth 5)]
-$(tree -L 5)"
-else
-  section+="
-
-[Project Tree Structure]
-(tree command not found — install it with 'sudo apt install tree')"
-fi
-
-echo "$section" >> "$output_file"
-echo "***************************************** END SECTION 3 ***************************************************" >> "$output_file"
-for i in {1..5}; do echo >> "$output_file"; done
+{
+    echo "******************************************* SECTION 3 **********************************************"
+    echo "This section prints the tree structure from the project root with 5 levels of recursion as of $(date)"
+    echo "***************************************** BEGIN ***************************************************"
+    if command -v tree >/dev/null 2>&1; then
+        echo -e "\n[Project Tree Structure (depth 5)]"
+        tree -L 5 -I "$(cat "$ignore_list_file" | tr '\n' '|' 2>/dev/null)"
+    else
+        echo -e "\n[Project Tree Structure]\n(tree command not found — install it with 'sudo apt install tree')"
+    fi
+    echo "***************************************** END SECTION 3 ***************************************************"
+    echo -e "\n\n"
+} >> "$output_file"
 
 # === Section 4: Full File Contents ===
 echo "[Step $step/$total_steps] Capturing full file contents..."
 ((step++))
-
-section="******************************************* SECTION 4 **********************************************
+echo "******************************************* SECTION 4 **********************************************
 This section outputs the complete contents of all text-based files in the project directory with 5 levels of recursion.
-***************************************** BEGIN ***************************************************"
-echo "$section" >> "$output_file"
+***************************************** BEGIN ***************************************************" >> "$output_file"
 
 ignore_patterns=()
-if [ -f "$ignore_list_file" ]; then
-  while IFS= read -r line; do
+while IFS= read -r line; do
     [ -n "$line" ] && ignore_patterns+=("$line")
-  done < "$ignore_list_file"
-fi
+done < "$ignore_list_file"
 
-should_ignore() {
-  for pattern in "${ignore_patterns[@]}"; do
-    if [[ "$1" == *"$pattern"* ]]; then
-      return 0
+find . -maxdepth 5 -type f -not -path "./reinstantiation/snapshot.txt" | while read -r file; do
+    for pattern in "${ignore_patterns[@]}"; do
+        [[ "$file" == *"$pattern"* ]] && continue 2
+    done
+    if file --brief --mime-type "$file" | grep -q '^text/'; then
+        echo "[[[[[ BEGIN FILE: $file ]]]]]" >> "$output_file"
+        cat "$file" >> "$output_file"
+        echo -e "\n[[[[[ END FILE: $file ]]]]]\n" >> "$output_file"
+    else
+        echo "[[[[[ BEGIN FILE: $file ]]]]]\n[[ BINARY FILE DETECTED: Content not displayed ]]\n[[[[[ END FILE: $file ]]]]]\n" >> "$output_file"
     fi
-  done
-  return 1
-}
-
-find . -type f | while read -r file; do
-  if should_ignore "$file"; then
-    continue
-  fi
-
-  file_type=$(file --brief --mime-type "$file")
-  
-  if echo "$file_type" | grep -q '^text/'; then
-    echo "[[[[[ BEGIN FILE: $file ]]]]]" >> "$output_file"
-    cat "$file" >> "$output_file"
-    echo >> "$output_file"
-    echo "[[[[[ END FILE: $file ]]]]]" >> "$output_file"
-    echo >> "$output_file"
-  else
-    echo "[[[[[ BEGIN FILE: $file ]]]]]" >> "$output_file"
-    echo "[[ BINARY FILE DETECTED: Content not displayed ]]" >> "$output_file"
-    echo "[[[[[ END FILE: $file ]]]]]" >> "$output_file"
-    echo >> "$output_file"
-  fi
 done
-
-echo "***************************************** END SECTION 4 ***************************************************" >> "$output_file"
-for i in {1..5}; do echo >> "$output_file"; done
+echo "***************************************** END SECTION 4 ***************************************************\n\n" >> "$output_file"
 
 # === Section 5: Ignored Files and Directories ===
 echo "[Step $step/$total_steps] Capturing ignored files and directories..."
 ((step++))
-
-section="******************************************* SECTION 5 **********************************************
-This section lists all files and directories that were intentionally omitted based on the ignore list.
-***************************************** BEGIN ***************************************************"
-echo "$section" >> "$output_file"
-
-if [ ${#ignore_patterns[@]} -eq 0 ]; then
-  echo "No ignored files or directories were configured." >> "$output_file"
-else
-  for pattern in "${ignore_patterns[@]}"; do
-    matches=$(find . -path "*$pattern*" 2>/dev/null)
-    if [ -n "$matches" ]; then
-      for match in $matches; do
-        if [ -d "$match" ]; then
-          count=$(find "$match" -type f | wc -l)
-          echo "[Ignored Directory] $match — $count files omitted" >> "$output_file"
-        elif [ -f "$match" ]; then
-          echo "[Ignored File] $match" >> "$output_file"
-        fi
-      done
+{
+    echo "******************************************* SECTION 5 **********************************************"
+    echo "This section lists all files and directories that were intentionally omitted based on the ignore list."
+    echo "***************************************** BEGIN ***************************************************"
+    if [ ${#ignore_patterns[@]} -eq 0 ]; then
+        echo "No ignored files or directories were configured."
     else
-      echo "[No match found for pattern] $pattern" >> "$output_file"
+        for pattern in "${ignore_patterns[@]}"; do
+            matches=$(find . -maxdepth 5 -path "*$pattern*" 2>/dev/null)
+            if [ -n "$matches" ]; then
+                echo "$matches" | while read -r match; do
+                    if [ -d "$match" ]; then
+                        count=$(find "$match" -type f | wc -l)
+                        echo "[Ignored Directory] $match — $count files omitted"
+                    elif [ -f "$match" ]; then
+                        echo "[Ignored File] $match"
+                    fi
+                done
+            else
+                echo "[No match found for pattern] $pattern"
+            fi
+        done
     fi
-  done
-fi
-
-echo "***************************************** END SECTION 5 ***************************************************" >> "$output_file"
-for i in {1..5}; do echo >> "$output_file"; done
+    echo "***************************************** END SECTION 5 ***************************************************"
+    echo -e "\n\n"
+} >> "$output_file"
 
 # === Section 6: Git Repository Information ===
-echo "[Step $step/$total_steps] Capturing Git repository info (if applicable)..."
+echo "[Step $step/$total_steps] Capturing Git repository info..."
 ((step++))
-
-section="******************************************* SECTION 6 **********************************************
-This section captures Git repository status and last commit if the project is version controlled.
-***************************************** BEGIN ***************************************************"
-echo "$section" >> "$output_file"
-
-if [ -d ".git" ]; then
-  echo "[Git Status]" >> "$output_file"
-  git status >> "$output_file" 2>/dev/null
-  echo >> "$output_file"
-  echo "[Last Git Commit]" >> "$output_file"
-  git log -1 >> "$output_file" 2>/dev/null
-else
-  echo "No Git repository detected in project root." >> "$output_file"
-fi
-
-echo "***************************************** END SECTION 6 ***************************************************" >> "$output_file"
-for i in {1..5}; do echo >> "$output_file"; done
+{
+    echo "******************************************* SECTION 6 **********************************************"
+    echo "This section captures Git repository status and last commit if the project is version controlled."
+    echo "***************************************** BEGIN ***************************************************"
+    if [ -d ".git" ]; then
+        echo -e "\n[Git Status]"
+        git status
+        echo -e "\n[Last Git Commit]"
+        git log -1
+    else
+        echo "No Git repository detected in project root."
+    fi
+    echo "***************************************** END SECTION 6 ***************************************************"
+    echo -e "\n\n"
+} >> "$output_file"
 
 # === Section 7: Key Environment Variables ===
 echo "[Step $step/$total_steps] Capturing environment variables..."
 ((step++))
-
-section="******************************************* SECTION 7 **********************************************
-This section captures important environment variables used during project development.
-***************************************** BEGIN ***************************************************"
-echo "$section" >> "$output_file"
-
-env | grep -E '^(PATH|PYTHONPATH|VIRTUAL_ENV|USER)=' >> "$output_file" || echo "No relevant environment variables found." >> "$output_file"
-
-echo "***************************************** END SECTION 7 ***************************************************" >> "$output_file"
+{
+    echo "******************************************* SECTION 7 **********************************************"
+    echo "This section captures important environment variables used during project development."
+    echo "***************************************** BEGIN ***************************************************"
+    env | grep -E '^(PATH|PYTHONPATH|VIRTUAL_ENV|USER)=' || echo "No relevant environment variables found."
+    echo "***************************************** END SECTION 7 ***************************************************"
+    echo -e "\n\n"
+} >> "$output_file"
 
 # === Finalization ===
 end_time=$(date '+%Y-%m-%d %H:%M:%S')
