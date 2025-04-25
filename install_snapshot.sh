@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # === Install snapshot tool into PATH ===
-##updated to unix end of line endings
 
 # Configuration
 INSTALL_DIR="$HOME/.local/bin"  # safest place without needing sudo
@@ -17,10 +16,16 @@ if [ -f "$CURRENT_DIR/$SCRIPT_NAME" ]; then
 elif [ -f "$CURRENT_DIR/${SCRIPT_NAME}.sh" ]; then
     SOURCE_FILE="$CURRENT_DIR/${SCRIPT_NAME}.sh"
     echo "[!] Found '${SCRIPT_NAME}.sh'. Installing as '$SCRIPT_NAME' without extension."
+    # Rename file temporarily without .sh for linking
+    cp "$SOURCE_FILE" "$CURRENT_DIR/$SCRIPT_NAME"
+    SOURCE_FILE="$CURRENT_DIR/$SCRIPT_NAME"
 else
     echo "[✖] Error: '$SCRIPT_NAME' or '${SCRIPT_NAME}.sh' not found in $CURRENT_DIR"
     exit 1
 fi
+
+# Ensure Unix line endings (prevent ^M issues)
+sed -i 's/\r$//' "$SOURCE_FILE"
 
 # Install by symlink (preferred: keeps it updatable easily)
 ln -sf "$SOURCE_FILE" "$INSTALL_DIR/$SCRIPT_NAME"
