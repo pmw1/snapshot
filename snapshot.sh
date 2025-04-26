@@ -177,7 +177,13 @@ echo "[Step $step/$total_steps] Capturing project tree structure..."
     echo "***************************************** BEGIN ***************************************************"
     if command -v tree >/dev/null 2>&1; then
         echo -e "\n[Project Tree Structure (depth 5)]"
-        tree -L 5 -I "$(cat "$ignore_list_file" | tr '\n' '|' 2>/dev/null)"
+        # Build ignore pattern safely
+        ignore_pattern=$(grep -v '^$' "$ignore_list_file" | sed 's/[[\.*^$/]/\\&/g' | tr '\n' '|' | sed 's/|$//')
+        if [ -z "$ignore_pattern" ]; then
+            tree -L 5
+        else
+            tree -L 5 -I "$ignore_pattern"
+        fi
     else
         echo -e "\n[Project Tree Structure]\n(tree command not found — install it with 'sudo apt install tree')"
     fi
