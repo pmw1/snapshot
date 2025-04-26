@@ -21,10 +21,6 @@ if [ -f "$CURRENT_DIR/$SCRIPT_NAME" ]; then
     SOURCE_FILE="$CURRENT_DIR/$SCRIPT_NAME"
 elif [ -f "$CURRENT_DIR/${SCRIPT_NAME}.sh" ]; then
     SOURCE_FILE="$CURRENT_DIR/${SCRIPT_NAME}.sh"
-    echo "[!] Found '${SCRIPT_NAME}.sh'. Installing as '$SCRIPT_NAME' without extension."
-    # Copy file without .sh extension
-    cp "$SOURCE_FILE" "$CURRENT_DIR/$SCRIPT_NAME" || { echo "[✖] Failed to copy script"; exit 1; }
-    SOURCE_FILE="$CURRENT_DIR/$SCRIPT_NAME"
 else
     echo "[✖] Error: '$SCRIPT_NAME' or '${SCRIPT_NAME}.sh' not found in $CURRENT_DIR"
     exit 1
@@ -34,8 +30,8 @@ fi
 sed -i.bak 's/\r$//' "$SOURCE_FILE" && rm -f "${SOURCE_FILE}.bak" || { echo "[✖] Failed to fix line endings"; exit 1; }
 
 # Check for existing snapshot command
-if [ -e "$INSTALL_DIR/$SCRIPT_NAME" ] && [ ! -L "$INSTALL_DIR/$SCRIPT_NAME" ]; then
-    echo "[!] Warning: $INSTALL_DIR/$SCRIPT_NAME already exists and is not a symlink."
+if [ -e "$INSTALL_DIR/$SCRIPT_NAME" ]; then
+    echo "[!] Warning: $INSTALL_DIR/$SCRIPT_NAME already exists."
     echo "    Overwrite? (y/n)"
     read -r response
     if [ "$response" != "y" ] && [ "$response" != "Y" ]; then
@@ -44,8 +40,8 @@ if [ -e "$INSTALL_DIR/$SCRIPT_NAME" ] && [ ! -L "$INSTALL_DIR/$SCRIPT_NAME" ]; t
     fi
 fi
 
-# Install by copying (not symlinking) to ensure global availability
-cp "$SOURCE_FILE" "$INSTALL_DIR/$SCRIPT_NAME" || { echo "[✖] Failed to copy to $INSTALL_DIR"; exit 1; }
+# Install by copying, forcing overwrite to handle existing files
+cp -f "$SOURCE_FILE" "$INSTALL_DIR/$SCRIPT_NAME" || { echo "[✖] Failed to copy to $INSTALL_DIR"; exit 1; }
 chmod +x "$INSTALL_DIR/$SCRIPT_NAME" || { echo "[✖] Failed to set executable permissions"; exit 1; }
 
 # Update PATH in shell config if necessary
