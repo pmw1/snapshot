@@ -29,19 +29,20 @@ fi
 # Ensure Unix line endings (macOS-compatible)
 sed -i.bak 's/\r$//' "$SOURCE_FILE" && rm -f "${SOURCE_FILE}.bak" || { echo "[✖] Failed to fix line endings"; exit 1; }
 
-# Check for existing snapshot command
-if [ -e "$INSTALL_DIR/$SCRIPT_NAME" ]; then
-    echo "[!] Warning: $INSTALL_DIR/$SCRIPT_NAME already exists."
+# Check for existing snapshot command or dangling symlink
+if [ -e "$INSTALL_DIR/$SCRIPT_NAME" ] || [ -L "$INSTALL_DIR/$SCRIPT_NAME" ]; then
+    echo "[!] Warning: $INSTALL_DIR/$SCRIPT_NAME already exists or is a dangling symlink."
     echo "    Overwrite? (y/n)"
     read -r response
     if [ "$response" != "y" ] && [ "$response" != "Y" ]; then
         echo "[✖] Installation aborted."
         exit 1
     fi
+    rm -f "$INSTALL_DIR/$SCRIPT_NAME" || { echo "[✖] Failed to remove existing $INSTALL_DIR/$SCRIPT_NAME"; exit 1; }
 fi
 
-# Install by copying, forcing overwrite to handle existing files
-cp -f "$SOURCE_FILE" "$INSTALL_DIR/$SCRIPT_NAME" || { echo "[✖] Failed to copy to $INSTALL_DIR"; exit 1; }
+# Install by copying directly to INSTALL_DIR
+cp "$SOURCE_FILE" "$INSTALL_DIR/$SCRIPT_NAME" || { echo "[✖] Failed to copy to $INSTALL_DIR"; exit 1; }
 chmod +x "$INSTALL_DIR/$SCRIPT_NAME" || { echo "[✖] Failed to set executable permissions"; exit 1; }
 
 # Update PATH in shell config if necessary
