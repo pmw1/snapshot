@@ -1,5 +1,25 @@
 #!/bin/bash
 
+# === Snapshot tool to capture project state for LLM handoff ===
+# Run from project root; --clear option wipes snapshot artifacts
+
+# Check for --clear option
+if [ "$1" = "--clear" ]; then
+    if [ ! -f ".project_root" ]; then
+        echo "[✖] Error: Not in a project root (no .project_root found)."
+        exit 1
+    fi
+    echo "[+] Clearing snapshot artifacts in $(pwd)..."
+    rm -f .project_root ignore_list.txt
+    rm -rf reinstantiation
+    if [ -f ".project_root" ] || [ -f "ignore_list.txt" ] || [ -d "reinstantiation" ]; then
+        echo "[✖] Failed to clear all artifacts. Check permissions."
+        exit 1
+    fi
+    echo "[✔] All snapshot artifacts cleared."
+    exit 0
+fi
+
 # === Force move to the real project root where .project_root exists ===
 if [ -f ".project_root" ]; then
     echo "[+] Project root detected."
@@ -47,10 +67,12 @@ fi
 output_file="reinstantiation/snapshot.txt"
 ignore_list_file="ignore_list.txt"
 
-# Check for ignore_list.txt
+# Generate ignore_list.txt on first run with secure defaults
 if [ ! -f "$ignore_list_file" ]; then
-    echo "[!] Warning: $ignore_list_file not found. Proceeding without ignore list."
-    ignore_list_file="/dev/null"
+    echo "[+] Creating $ignore_list_file with secure defaults..."
+    echo -e ".env\nkairo_env\n__pycache__\nnode_modules\nsnapshot.txt\n.git\n.obsidian" > "$ignore_list_file"
+else
+    echo "[+] Using existing $ignore_list_file"
 fi
 
 start_time=$(date '+%Y-%m-%d %H:%M:%S')
@@ -132,8 +154,15 @@ echo "[Step $step/$total_steps] Capturing system environment..."
         echo -e "\n[PIP Modules]"
         pip list
         deactivate
+    elif [ -f "kairo_env/bin/activate" ]; then
+        source kairo_env/bin/activate
+        echo -e "\n[Virtual Environment]"
+        python --version
+        echo -e "\n[PIP Modules]"
+        pip list
+        deactivate
     else
-        echo -e "\n[Virtual Environment]\n(venv not found or not available)"
+        echo -e "\n[Virtual Environment]\n(venv or kairo_env not found or not available)"
     fi
     echo "***************************************** END SECTION 2 ***************************************************"
     echo -e "\n\n"
@@ -177,7 +206,6 @@ find . -maxdepth 5 -type f -not -path "./reinstantiation/snapshot.txt" | while r
         cat "$file" >> "$output_file"
         echo -e "\n[[[[[ END FILE: $file ]]]]]\n" >> "$output_file"
     else
-        echo
         echo "[[[[[ BEGIN FILE: $file ]]]]]\n[[ BINARY FILE DETECTED: Content not displayed ]]\n[[[[[ END FILE: $file ]]]]]\n" >> "$output_file"
     fi
 done
